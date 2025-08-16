@@ -6,12 +6,14 @@ from transformers import AutoTokenizer, AutoModelForSequenceClassification
 # =========================
 # Load model & tokenizer
 # =========================
-MODEL_DIR = "models/indobert_finetuned"  # ganti sesuai lokasi modelmu
+# MODEL_DIR = "models/indobert_finetuned"  # ganti sesuai lokasi modelmu
+
+HF_REPO_ID = st.secrets.get("Haekal1042/danantarasentiment", "")  # ex: "username/indobert-sentiment"
 
 @st.cache_resource
 def load_model():
-    model = AutoModelForSequenceClassification.from_pretrained(MODEL_DIR)
-    tokenizer = AutoTokenizer.from_pretrained(MODEL_DIR)
+    model = AutoModelForSequenceClassification.from_pretrained(HF_REPO_ID, token=HF_TOKEN)
+    tokenizer = AutoTokenizer.from_pretrained(HF_REPO_ID, token=HF_TOKEN)
     model.eval()
     return model, tokenizer
 
@@ -179,3 +181,4 @@ if st.button("Analyze Sentiment", type="primary"):
 final           : {steps['final']}""",
                     language="text"
                 )
+
