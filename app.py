@@ -8,21 +8,45 @@ from transformers import AutoTokenizer, AutoModelForSequenceClassification
 # =========================
 # MODEL_DIR = "models/indobert_finetuned"  # ganti sesuai lokasi modelmu
 
-HF_REPO_ID = st.secrets.get("HF_REPO_ID", "Haekal1042/danantarasentiment")  # ex: "username/indobert-sentiment"
-HF_TOKEN   = st.secrets.get("HF_TOKEN", None)  # kosongkan jika repo publik
+# Secrets (Streamlit Cloud → Settings → Secrets)
+# Wajib isi HF_REPO_ID (repo model publikmu). HF_TOKEN opsional (hanya jika repo private).
+HF_REPO_ID   = st.secrets.get("HF_REPO_ID", "Haekal1042/danantarasentiment")
+HF_TOKEN     = st.secrets.get("HF_TOKEN", None)        # biarkan None untuk repo publik
+HF_SUBFOLDER = st.secrets.get("HF_SUBFOLDER", "")      # contoh: "indobert_finetuned" jika file ada di subfolder
 
 @st.cache_resource
 def load_model():
     if not HF_REPO_ID:
-        raise ValueError("HF_REPO_ID belum di-set. Isi di Settings → Secrets (key: HF_REPO_ID) atau hardcode di kode.")
+        raise ValueError("HF_REPO_ID belum di-set. Isi di Settings → Secrets (key: HF_REPO_ID).")
+
+    # siapkan kwargs dinamis (token/subfolder hanya jika ada)
+    kwargs = {}
     if HF_TOKEN:
-        model = AutoModelForSequenceClassification.from_pretrained(HF_REPO_ID, token=HF_TOKEN)
-        tokenizer = AutoTokenizer.from_pretrained(HF_REPO_ID, token=HF_TOKEN)
-    else:
-        model = AutoModelForSequenceClassification.from_pretrained(HF_REPO_ID)
-        tokenizer = AutoTokenizer.from_pretrained(HF_REPO_ID)
-    model.eval()
-    return model, tokenizer
+        kwargs["token"] = HF_TOKEN
+    if HF_SUBFOLDER:
+        kwargs["subfolder"] = HF_SUBFOLDER
+
+    # 1) Coba langsung (root atau subfolder jika diset)
+    try:
+        model = AutoModelForSequenceClassification.from_pretrained(HF_REPO_ID, **kwargs)
+        tokenizer = AutoTokenizer.from_pretrained(HF_REPO_ID, **kwargs)
+        model.eval()
+        return model, tokenizer
+    except ValueError as e:
+        # 2) Fallback: seringnya file ada di subfolder umum berikut
+        for sub in ("indobert_finetuned", "model", "models"):
+            try:
+                k2 = dict(kwargs)
+                k2["subfolder"] = sub
+                model = AutoModelForSequenceClassification.from_pretrained(HF_REPO_ID, **k2)
+                tokenizer = AutoTokenizer.from_pretrained(HF_REPO_ID, **k2)
+                model.eval()
+                return model, tokenizer
+            except Exception:
+                pass
+        # Jika semua gagal, lempar error asli (agar terlihat di logs Streamlit)
+        raise e
+
 model, tokenizer = load_model()
 
 # =========================
@@ -187,5 +211,6 @@ if st.button("Analyze Sentiment", type="primary"):
 final           : {steps['final']}""",
                     language="text"
                 )
+
 
 
