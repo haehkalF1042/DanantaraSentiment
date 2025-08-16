@@ -14,7 +14,7 @@ from huggingface_hub import list_repo_files  # pastikan ada di requirements.txt
 # HF_TOKEN = "hf_xxx"                    # hanya jika repo private (repo publik: hapus)
 # HF_TRUST_REMOTE_CODE = false           # true hanya jika model custom dgn kode python di repo
 HF_REPO_ID   = st.secrets.get("HF_REPO_ID", "Haekal1042/danantarasentiment")
-HF_SUBFOLDER = st.secrets.get("HF_SUBFOLDER", "")
+HF_SUBFOLDER = st.secrets.get("HF_SUBFOLDER", "indobert_finetuned")
 HF_TOKEN     = st.secrets.get("HF_TOKEN", None)
 TRUST_REMOTE = bool(st.secrets.get("HF_TRUST_REMOTE_CODE", False))
 
@@ -247,3 +247,4 @@ if st.button("Analyze Sentiment", type="primary"):
 final           : {steps['final']}""",
                     language="text"
                 )
+
