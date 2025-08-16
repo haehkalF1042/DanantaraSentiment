@@ -2,7 +2,7 @@ import streamlit as st
 import torch
 import torch.nn.functional as F
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
-from huggingface_hub import list_repo_files  # <-- pastikan ada di requirements.txt
+from huggingface_hub import list_repo_files  # pastikan ada di requirements.txt
 
 # =========================
 # Load model & tokenizer (HF Hub)
@@ -12,9 +12,11 @@ from huggingface_hub import list_repo_files  # <-- pastikan ada di requirements.
 # HF_REPO_ID = "Haekal1042/danantarasentiment"
 # HF_SUBFOLDER = "indobert_finetuned"   # kosongkan jika file model ada di root
 # HF_TOKEN = "hf_xxx"                    # hanya jika repo private (repo publik: hapus)
+# HF_TRUST_REMOTE_CODE = false           # true hanya jika model custom dgn kode python di repo
 HF_REPO_ID   = st.secrets.get("HF_REPO_ID", "Haekal1042/danantarasentiment")
 HF_SUBFOLDER = st.secrets.get("HF_SUBFOLDER", "")
 HF_TOKEN     = st.secrets.get("HF_TOKEN", None)
+TRUST_REMOTE = bool(st.secrets.get("HF_TRUST_REMOTE_CODE", False))
 
 @st.cache_resource
 def load_model():
@@ -27,6 +29,8 @@ def load_model():
         kwargs["token"] = HF_TOKEN
     if HF_SUBFOLDER:
         kwargs["subfolder"] = HF_SUBFOLDER
+    if TRUST_REMOTE:
+        kwargs["trust_remote_code"] = True
 
     # 1) Coba load langsung (root atau subfolder jika sudah diset)
     try:
@@ -51,10 +55,12 @@ def load_model():
 
             for sub in sorted(candidates):
                 has_bin  = any(x == f"{sub}/pytorch_model.bin" for x in files)
-                has_safe = any(x == f"{sub}/model.safetensors" for x in files) or any(x.endswith(".safetensors") and x.startswith(f"{sub}/") for x in files)
+                has_safe = any(x.startswith(f"{sub}/") and x.endswith(".safetensors") for x in files)
                 if has_bin or has_safe:
                     try:
-                        model = AutoModelForSequenceClassification.from_pretrained(HF_REPO_ID, subfolder=sub, token=HF_TOKEN)
+                        model = AutoModelForSequenceClassification.from_pretrained(
+                            HF_REPO_ID, subfolder=sub, token=HF_TOKEN, trust_remote_code=TRUST_REMOTE
+                        )
                         tokenizer = AutoTokenizer.from_pretrained(HF_REPO_ID, subfolder=sub, token=HF_TOKEN)
                         model.eval()
                         st.sidebar.info(f"Memuat model dari subfolder: {sub}")
@@ -75,19 +81,11 @@ def load_model():
 
 model, tokenizer = load_model()
 
-# (opsional) info debug ringan di sidebar
+# info debug ringan di sidebar
 st.sidebar.caption(f"HF_REPO_ID: {HF_REPO_ID}")
-if HF_SUBFOLDER:
-    st.sidebar.caption(f"HF_SUBFOLDER: {HF_SUBFOLDER}")
-
-
-# (opsional) tampilkan info debug di sidebar
-st.sidebar.caption(f"HF_REPO_ID: {HF_REPO_ID}")
-if HF_SUBFOLDER:
-    st.sidebar.caption(f"HF_SUBFOLDER: {HF_SUBFOLDER}")
+st.sidebar.caption(f"HF_SUBFOLDER: {HF_SUBFOLDER or '(root)'}")
 if TRUST_REMOTE:
     st.sidebar.caption("trust_remote_code: ON")
-
 
 # =========================
 # Preprocessing (Sastrawi + regex)
@@ -140,7 +138,6 @@ def init_preprocessor():
 PRE = init_preprocessor()
 
 def preprocess_text(text: str):
-   
     if text is None:
         text = ""
     t0 = text
@@ -184,7 +181,6 @@ LABEL_MAP = {
     "LABEL_1": "Netral",
     "LABEL_2": "Positif",
     "LABEL_0": "Negatif",
-
 }
 
 def map_label(pred_id: int) -> str:
@@ -251,8 +247,3 @@ if st.button("Analyze Sentiment", type="primary"):
 final           : {steps['final']}""",
                     language="text"
                 )
-
-
-
-
-
