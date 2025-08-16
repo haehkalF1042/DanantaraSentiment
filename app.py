@@ -8,15 +8,21 @@ from transformers import AutoTokenizer, AutoModelForSequenceClassification
 # =========================
 # MODEL_DIR = "models/indobert_finetuned"  # ganti sesuai lokasi modelmu
 
-HF_REPO_ID = st.secrets.get("Haekal1042/danantarasentiment", "")  # ex: "username/indobert-sentiment"
+HF_REPO_ID = st.secrets.get("HF_REPO_ID", "Haekal1042/danantarasentiment")  # ex: "username/indobert-sentiment"
+HF_TOKEN   = st.secrets.get("HF_TOKEN", None)  # kosongkan jika repo publik
 
 @st.cache_resource
 def load_model():
-    model = AutoModelForSequenceClassification.from_pretrained(HF_REPO_ID, token=HF_TOKEN)
-    tokenizer = AutoTokenizer.from_pretrained(HF_REPO_ID, token=HF_TOKEN)
+    if not HF_REPO_ID:
+        raise ValueError("HF_REPO_ID belum di-set. Isi di Settings → Secrets (key: HF_REPO_ID) atau hardcode di kode.")
+    if HF_TOKEN:
+        model = AutoModelForSequenceClassification.from_pretrained(HF_REPO_ID, token=HF_TOKEN)
+        tokenizer = AutoTokenizer.from_pretrained(HF_REPO_ID, token=HF_TOKEN)
+    else:
+        model = AutoModelForSequenceClassification.from_pretrained(HF_REPO_ID)
+        tokenizer = AutoTokenizer.from_pretrained(HF_REPO_ID)
     model.eval()
     return model, tokenizer
-
 model, tokenizer = load_model()
 
 # =========================
@@ -181,4 +187,5 @@ if st.button("Analyze Sentiment", type="primary"):
 final           : {steps['final']}""",
                     language="text"
                 )
+
 
