@@ -2,52 +2,82 @@ import streamlit as st
 import torch
 import torch.nn.functional as F
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
+from huggingface_hub import list_repo_files  # <- butuh 'huggingface_hub' di requirements.txt
 
 # =========================
-# Load model & tokenizer
+# Load model & tokenizer (HF Hub)
 # =========================
-# MODEL_DIR = "models/indobert_finetuned"  # ganti sesuai lokasi modelmu
 
-# Secrets (Streamlit Cloud → Settings → Secrets)
-# Wajib isi HF_REPO_ID (repo model publikmu). HF_TOKEN opsional (hanya jika repo private).
+# Ambil dari Secrets (Settings → Secrets). Contoh TOML:
+# HF_REPO_ID = "Haekal1042/danantarasentiment"
+# HF_SUBFOLDER = "indobert_finetuned"   # kosongkan jika file ada di root
+# HF_TRUST_REMOTE_CODE = false          # set true hanya jika model custom
 HF_REPO_ID   = st.secrets.get("HF_REPO_ID", "Haekal1042/danantarasentiment")
-HF_TOKEN     = st.secrets.get("HF_TOKEN", None)        # biarkan None untuk repo publik
-HF_SUBFOLDER = st.secrets.get("HF_SUBFOLDER", "")      # contoh: "indobert_finetuned" jika file ada di subfolder
+HF_SUBFOLDER = st.secrets.get("HF_SUBFOLDER", "")
+HF_TOKEN     = st.secrets.get("HF_TOKEN", None)  # tidak perlu untuk repo publik
+TRUST_REMOTE = bool(st.secrets.get("HF_TRUST_REMOTE_CODE", False))
 
 @st.cache_resource
 def load_model():
     if not HF_REPO_ID:
-        raise ValueError("HF_REPO_ID belum di-set. Isi di Settings → Secrets (key: HF_REPO_ID).")
+        raise ValueError("HF_REPO_ID belum di-set di Secrets atau hardcode.")
 
-    # siapkan kwargs dinamis (token/subfolder hanya jika ada)
+    # --- siapkan kwargs dinamis ---
     kwargs = {}
     if HF_TOKEN:
         kwargs["token"] = HF_TOKEN
     if HF_SUBFOLDER:
         kwargs["subfolder"] = HF_SUBFOLDER
+    if TRUST_REMOTE:
+        kwargs["trust_remote_code"] = True
 
-    # 1) Coba langsung (root atau subfolder jika diset)
+    # --- coba langsung (root atau subfolder jika diset) ---
     try:
         model = AutoModelForSequenceClassification.from_pretrained(HF_REPO_ID, **kwargs)
         tokenizer = AutoTokenizer.from_pretrained(HF_REPO_ID, **kwargs)
         model.eval()
         return model, tokenizer
     except ValueError as e:
-        # 2) Fallback: seringnya file ada di subfolder umum berikut
-        for sub in ("indobert_finetuned", "model", "models"):
-            try:
-                k2 = dict(kwargs)
-                k2["subfolder"] = sub
-                model = AutoModelForSequenceClassification.from_pretrained(HF_REPO_ID, **k2)
-                tokenizer = AutoTokenizer.from_pretrained(HF_REPO_ID, **k2)
-                model.eval()
-                return model, tokenizer
-            except Exception:
-                pass
-        # Jika semua gagal, lempar error asli (agar terlihat di logs Streamlit)
+        # Kemungkinan besar file model tak ada di root → coba deteksi subfolder umum
+        # (hanya lakukan auto-scan jika HF_SUBFOLDER belum diisi)
+        if HF_SUBFOLDER:
+            raise e
+
+        try:
+            files = list_repo_files(HF_REPO_ID, repo_type="model", token=HF_TOKEN)
+        except Exception as e2:
+            raise ValueError(f"Gagal mengakses repo HF: {e2}")
+
+        # kandidat subfolder yang sering dipakai
+        candidates = ["indobert_finetuned", "model", "models", "checkpoint", "checkpoints"]
+        for sub in candidates:
+            has_config = any(f == f"{sub}/config.json" for f in files)
+            has_bin    = any(f == f"{sub}/pytorch_model.bin" or f == f"{sub}/model.safetensors" for f in files)
+            if has_config and has_bin:
+                kwargs2 = dict(kwargs)
+                kwargs2["subfolder"] = sub
+                try:
+                    model = AutoModelForSequenceClassification.from_pretrained(HF_REPO_ID, **kwargs2)
+                    tokenizer = AutoTokenizer.from_pretrained(HF_REPO_ID, **kwargs2)
+                    model.eval()
+                    # tampilkan info di sidebar agar kamu tahu subfolder mana dipakai
+                    st.sidebar.info(f"Memuat model dari subfolder: {sub}")
+                    return model, tokenizer
+                except Exception:
+                    pass
+
+        # kalau semua gagal, naikkan error awal agar terlihat jelas di logs
         raise e
 
 model, tokenizer = load_model()
+
+# (opsional) tampilkan info debug di sidebar
+st.sidebar.caption(f"HF_REPO_ID: {HF_REPO_ID}")
+if HF_SUBFOLDER:
+    st.sidebar.caption(f"HF_SUBFOLDER: {HF_SUBFOLDER}")
+if TRUST_REMOTE:
+    st.sidebar.caption("trust_remote_code: ON")
+
 
 # =========================
 # Preprocessing (Sastrawi + regex)
@@ -211,6 +241,7 @@ if st.button("Analyze Sentiment", type="primary"):
 final           : {steps['final']}""",
                     language="text"
                 )
+
 
 
 
